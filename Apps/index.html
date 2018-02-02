@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Use correct character set. -->
+    <meta charset="utf-8">
+    <!-- Tell IE to use the latest, best version. -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!-- Make the application on mobile take up the full browser screen and disable user scaling. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+    <title>Hello World!</title>
+    <script src="../Build/Cesium/Cesium.js"></script>
+    <style>
+        @import url(../Build/Cesium/Widgets/widgets.css);
+        * {
+            padding: 0px;
+            margin: 0px;
+        }
+
+        html,
+        body,
+        #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        body {
+            position: relative;
+
+        }
+
+        #mainRoleAngle {
+            width: 250px;
+            height: 110px;
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            background-color: white;
+            opacity: 0.8;
+            padding: 10px;
+
+        }
+    </style>
+</head>
+
+<body>
+    <div id="cesiumContainer"></div>
+   
+
+    <script src="../CSGDemoTest/appconfig.js"></script>
+    <script src="../CSGDemoTest/CesiumMeshVisualizer.js"></script>
+    <!--<script src="../CSGDemoTest/ammo.js-master/builds/ammo.js"></script>-->
+    <script src="../CSGDemoTest/appconfig.js"></script>
+    <script src="../cannonJS/cannon.js"></script>
+
+
+    <script>
+
+        var homePosition = [118.9224, 32.1033, 100];//初始位置
+
+
+        var viewer = null;
+
+        function init() {
+            if (viewer) {
+                return;
+            }
+            viewer = new Cesium.Viewer("cesiumContainer");
+
+            viewer.homeButton.viewModel.command.beforeExecute.addEventListener(function (evt) {
+                look(homePosition[0], homePosition[1], homePosition[2]);
+                evt.cancel = true;
+            })
+            look(homePosition[0], homePosition[1], homePosition[2]);
+
+            var imageryProviderViewModels = viewer.baseLayerPicker.viewModel.imageryProviderViewModels;
+            viewer.baseLayerPicker.viewModel.selectedImagery = imageryProviderViewModels[3];
+            viewer.extend(Cesium.viewerCesiumInspectorMixin);
+            viewer.cesiumInspector.container.style.display = "none";
+            viewer.scene.debugShowFramesPerSecond = true;
+        }
+
+
+
+        function look(lon, lat, offset) {
+            if (!viewer) {
+                return;
+            }
+            var center = Cesium.Cartesian3.fromDegrees(lon, lat);
+            var transform = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+
+            // View in east-north-up frame
+            var camera = viewer.camera;
+            camera.constrainedAxis = Cesium.Cartesian3.UNIT_Z;
+            camera.lookAtTransform(transform, new Cesium.Cartesian3(-offset, -offset, offset));
+            setTimeout(function () {
+                camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+            }, 100)
+
+
+        }
+
+        init();
+
+
+
+
+
+
+        var MeshVisualizer = Cesium.MeshVisualizer;
+        var Mesh = Cesium.Mesh;
+        var MeshMaterial = Cesium.MeshMaterial;
+        var MeshPhongMaterial = Cesium.MeshPhongMaterial;
+        var FramebufferTexture = Cesium.FramebufferTexture;
+        var GeometryUtils = Cesium.GeometryUtils;
+        var LOD = Cesium.LOD;
+        homePosition[2] = 100;
+
+
+
+
+
+        var center = Cesium.Cartesian3.fromDegrees(homePosition[0], homePosition[1], 20);
+
+        var modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+
+
+        var meshVisualizer = new MeshVisualizer({
+            modelMatrix: modelMatrix,
+            up: { z: 1 },
+            referenceAxisParameter: {
+                length: 100,
+                width: 0.5,
+                headLength: 2,
+                headWidth: 1.0
+            }
+        });
+        viewer.scene.primitives.add(meshVisualizer);
+        meshVisualizer.showReference = true;//显示坐标轴
+
+
+
+        function createBoxMesh(dmX, dmY, dmZ, scale) {
+
+            var dimensions = new Cesium.Cartesian3(dmX, dmY, dmZ);
+            var boxGeometry = Cesium.BoxGeometry.fromDimensions({
+                dimensions: dimensions,
+                vertexFormat: Cesium.VertexFormat.POSITION_AND_NORMAL
+            });
+            var material = new MeshPhongMaterial({
+                defaultColor: "rgb(125,125,125)"
+            });
+
+            var mesh = new Mesh(boxGeometry, material);
+            if (scale) {
+                mesh.scale.x = scale;
+                mesh.scale.y = scale;
+                mesh.scale.z = scale;
+            }
+            return mesh;
+        }
+
+        function createSphereMesh(r, scale) {
+            //创建球体
+            var sphere = new Cesium.SphereGeometry({
+                radius: r,
+                vertexFormat: Cesium.VertexFormat.POSITION_ONLY
+            });
+            var material = new MeshPhongMaterial({
+                defaultColor: "rgb( 0," + 125 * (Math.random() + 0.5) + " ,0)"
+            });
+            var mesh = new Mesh(sphere, material);
+            if (scale) {
+                mesh.scale.x = scale;
+                mesh.scale.y = scale;
+                mesh.scale.z = scale;
+            }
+            return mesh;
+        }
+        var groundMesh = createBoxMesh(50 * 2, 50 * 2, 10 * 2, 1);
+        groundMesh.position.z = -10;
+        meshVisualizer.add(groundMesh);
+
+
+        var world2localMatrix = new Cesium.Matrix4();
+        var blueBoxLocalPos = new Cesium.Cartesian3();
+        var blueBoxPos = Cesium.Cartesian3.fromDegrees(118.9224, 32.1033, 500);
+        
+        var blueBoxPosGet = new Cesium.Cartesian3();
+        var blueBoxPosGet2World = new Cesium.Cartesian3();
+        var isConstant=false;
+
+        var blueBox = viewer.entities.add({
+            name: 'Blue box',
+            position: new Cesium.CallbackProperty(function(time) {
+                meshVisualizer.localToWorldCoordinates(blueBoxPosGet, blueBoxPosGet2World);
+            return blueBoxPosGet2World;
+        }, isConstant),
+            
+            box: {
+                dimensions: new Cesium.Cartesian3(100, 100, 20),
+                material: Cesium.Color.BLUE
+            }
+        });
+
+
+        var localCoordinates = meshVisualizer.position;
+        var result = new Cesium.Cartesian3();
+        var result1 = new Cesium.Cartesian3();
+
+
+        var world, body, timeStep = 1 / 60;
+        var scene = viewer.scene;
+
+
+        function initCannon() {
+
+            world = new CANNON.World();
+            world.gravity.set(0, 0, -9.82);
+            world.broadphase = new CANNON.NaiveBroadphase();
+            world.solver.iterations = 10;
+
+            var groundBody = new CANNON.Body({
+                mass: 0
+            });
+            var groundShape = new CANNON.Plane();
+            groundBody.addShape(groundShape);
+            world.addBody(groundBody);
+
+
+            shape = new CANNON.Box(new CANNON.Vec3(50, 50, 10));
+            mass = 1;
+            body = new CANNON.Body({
+                mass: 1
+            });
+            body.addShape(shape);
+
+
+            body.position = new CANNON.Vec3(0, 0, 500);
+            world.addBody(body);
+
+        }
+        var fixedTimeStep = 1.0 / 60.0; // seconds
+        var maxSubSteps = 3;
+        var lastTime;
+
+        initCannon();
+
+         
+        viewer.scene.preRender.addEventListener(function (scene, time) {
+
+            if (lastTime !== undefined) {
+                var dt = (time - lastTime) / 1000;
+                world.step(fixedTimeStep, dt, maxSubSteps);
+            }
+
+            blueBox.position.getValue(time, blueBoxPosGet);
+            blueBoxPosGet.x = body.position.x;
+            blueBoxPosGet.y = body.position.y;
+            blueBoxPosGet.z = body.position.z;       
+
+
+
+
+            lastTime = time;
+
+
+
+
+
+
+
+        });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    </script>
+</body>
+
+</html>
